@@ -962,7 +962,7 @@ src="https://www.facebook.com/tr?id=1617480666150648&ev=PageView&noscript=1"
           </div>
         </div>
 
-        <button class="submit-btn" onclick="submitOrder()">✅ تأكيد الطلب</button>
+        <button class="submit-btn" onclick="secureSubmitOrder()">✅ تأكيد الطلب</button>
 
         <!-- WhatsApp Alternative -->
         <div class="whatsapp-section">
@@ -1087,7 +1087,7 @@ src="https://www.facebook.com/tr?id=1617480666150648&ev=PageView&noscript=1"
   });
 
   /* ── FORM ── */
-  function submitOrder(){
+  function secureSubmitOrder(){
     const n=document.getElementById('f-name').value.trim();
     const p=document.getElementById('f-phone').value.trim();
     const w=document.getElementById('f-wilaya').value;
@@ -1305,4 +1305,64 @@ window.addEventListener('load',function(){
     <p style="margin-top:6px;">للتواصل: <a href="tel:+213784719138" style="color:#C8102E;">+213 784 719 138</a></p>
   </div>
 </div>
+
+<script>
+(function(){
+  const KEY='sandacare_device_id';
+  let id=localStorage.getItem(KEY);
+  if(!id){id='dev_'+crypto.randomUUID();localStorage.setItem(KEY,id)}
+  window.SANDA_DEVICE_ID=id;
+})();
+async function secureSubmitOrder(e){
+  if(e)e.preventDefault();
+  const hp=document.getElementById('hp_company');
+  if(hp&&hp.value.trim()) return false;
+  const payload={
+    name:(document.querySelector('#name')||{}).value?.trim?.()||'',
+    phone:(document.querySelector('#phone')||{}).value?.trim?.()||'',
+    address:(document.querySelector('#address')||{}).value?.trim?.()||'',
+    qty:(document.querySelector('#qty')||{}).value||'1',
+    device_id:window.SANDA_DEVICE_ID||'',
+    ts:Date.now()
+  };
+  const res=await fetch('/api/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok||!data.ok){alert(data.message||'Rejected');return false}
+  const success=document.querySelector('.success-msg'); if(success) success.style.display='block'; return true;
+}
+window.secureSubmitOrder=secureSubmitOrder;
+</script>
+
+
+<script>
+(async function(){
+  const DB_KEY='sandacare_orders_v1';
+  function load(){ try{return JSON.parse(localStorage.getItem(DB_KEY)||'[]')}catch(e){return[]} }
+  function save(v){ localStorage.setItem(DB_KEY, JSON.stringify(v)) }
+  function ykey(t){ const d=new Date(t||Date.now()); return d.getFullYear(); }
+  function alreadyOrdered(records, field, value){
+    return records.some(r => r[field] === value && ykey(r.ts) === ykey(Date.now()));
+  }
+  async function handle(payload){
+    const records=load();
+    const cleaned={
+      name:(payload.name||'').trim(),
+      phone:(payload.phone||'').trim(),
+      address:(payload.address||'').trim(),
+      qty:String(payload.qty||'1').trim(),
+      device_id:(payload.device_id||'').trim(),
+      ip:(payload.ip||'').trim(),
+      ts:Date.now()
+    };
+    if(!cleaned.name || !cleaned.phone || !cleaned.address || !cleaned.device_id) return {ok:false,message:'Missing fields'};
+    if(alreadyOrdered(records,'device_id',cleaned.device_id)) return {ok:false,message:'Device already used this year'};
+    if(alreadyOrdered(records,'phone',cleaned.phone)) return {ok:false,message:'Phone already used this year'};
+    if(cleaned.ip && alreadyOrdered(records,'ip',cleaned.ip)) return {ok:false,message:'IP already used this year'};
+    records.push(cleaned); save(records);
+    return {ok:true,message:'Accepted'};
+  }
+  window.SANDA_BACKEND_VALIDATE = handle;
+})();
+</script>
+
 </body></html>
